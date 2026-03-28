@@ -620,9 +620,10 @@
       const lapTimes = (r1?.lapTimes || []).filter(Boolean).map(parseTime).filter(Boolean);
       const bestLap  = Math.min(...lapTimes);
       const worstLap = Math.max(...lapTimes);
-      // Consistency: how tight the lap time spread is (lower spread = better)
+      // Consistency: how tight the lap time spread is within the run (lower spread = better)
+      // Multiply by 50 so that a 2-second spread = ~0% and 0-second spread = 100%
       const consistency = Math.max(0, 100 - (worstLap - bestLap) * 50);
-      // Speed: how close to the round's fastest lap (0% gap = 100, each 1 s gap = -5)
+      // Speed: proximity to the fastest overall lap; deduct 5 points per second behind the leader
       const speedScore  = Math.max(0, 100 - (bestLap - fastestOverall) * 5);
       const lapsScore   = (r1?.laps / 3) * 100;
       const classScore  = ["1S3", "2C", "2S4", "1S4"].includes(d.class) ? 90 : 72;
