@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Race Results Visualiser — Natsoft | NSW Supersprint Championship</title>
+  <meta name="description" content="Interactive race results visualisation for NSW Supersprint Championship. Powered by Natsoft race timing data." />
+
+  <!-- Chart.js (local) -->
+  <script src="chart.umd.min.js"></script>
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<!-- ===== Header ===== -->
+<header class="site-header">
+  <div class="header-inner">
+    <a href="#" class="logo">
+      <div class="logo-icon">🏁</div>
+      <div class="logo-text">Race<span>Viz</span></div>
+    </a>
+
+    <nav class="nav-tabs">
+      <button class="nav-tab" data-panel="overview">Overview</button>
+      <button class="nav-tab" data-panel="results">Results</button>
+      <button class="nav-tab" data-panel="laps">Lap Analysis</button>
+      <button class="nav-tab" data-panel="classes">By Class</button>
+      <button class="nav-tab" data-panel="compare">Compare</button>
+      <button class="nav-tab" data-panel="gaps">Gap Analysis</button>
+      <button class="nav-tab" data-panel="drivers">Drivers</button>
+    </nav>
+
+    <button class="mobile-menu-btn" id="mobile-menu-btn" aria-label="Open menu">☰</button>
+  </div>
+
+  <!-- Mobile menu -->
+  <div id="mobile-menu" style="display:none;flex-direction:column;padding:8px 16px 16px;gap:4px;border-top:1px solid var(--border-color)">
+    <button class="nav-tab" data-panel="overview">Overview</button>
+    <button class="nav-tab" data-panel="results">Results</button>
+    <button class="nav-tab" data-panel="laps">Lap Analysis</button>
+    <button class="nav-tab" data-panel="classes">By Class</button>
+    <button class="nav-tab" data-panel="compare">Compare</button>
+    <button class="nav-tab" data-panel="gaps">Gap Analysis</button>
+    <button class="nav-tab" data-panel="drivers">Drivers</button>
+  </div>
+</header>
+
+<!-- ===== Event Hero ===== -->
+<section class="event-hero">
+  <div class="event-hero-inner">
+    <div>
+      <h1 class="event-title">
+        <span id="hero-event-name">NSW Supersprint Championship</span>
+      </h1>
+      <div class="event-meta">
+        <span class="event-meta-item">📍 <span id="hero-venue"></span></span>
+        <span class="event-meta-item">📅 <span id="hero-date"></span></span>
+        <span class="event-meta-item">🏆 <span id="hero-round"></span></span>
+        <span class="event-meta-item"><span class="live-dot"></span> Natsoft Timing</span>
+      </div>
+    </div>
+    <div class="event-stats">
+      <div class="stat-chip">
+        <div class="stat-chip-value" id="stat-entries">—</div>
+        <div class="stat-chip-label">Entries</div>
+      </div>
+      <div class="stat-chip">
+        <div class="stat-chip-value" id="stat-classes">—</div>
+        <div class="stat-chip-label">Classes</div>
+      </div>
+      <div class="stat-chip">
+        <div class="stat-chip-value" id="stat-record">—</div>
+        <div class="stat-chip-label">Fastest Race Lap</div>
+      </div>
+      <div class="stat-chip">
+        <div class="stat-chip-value" id="stat-laps">—</div>
+        <div class="stat-chip-label">Total Laps</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== Main Content ===== -->
+<main class="main-content">
+
+  <!-- ============================
+       OVERVIEW PANEL
+  ============================= -->
+  <section class="panel" id="panel-overview">
+
+    <!-- Records -->
+    <div class="section-gap">
+      <div class="section-header">
+        <h2 class="section-title">🏆 Event Records <span class="badge">Round 2</span></h2>
+      </div>
+      <div class="grid-4">
+        <div id="record-fastest-lap"></div>
+        <div id="record-fastest-race"></div>
+        <div id="record-most-laps"></div>
+        <div id="record-entries"></div>
+      </div>
+    </div>
+
+    <!-- Podiums -->
+    <div class="section-gap">
+      <div class="section-header">
+        <h2 class="section-title">🥇 Race Podiums</h2>
+      </div>
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-title"><span class="icon">🏁</span> Race 1 — Podium</div>
+          <div class="podium" id="podium-race1"></div>
+        </div>
+        <div class="card">
+          <div class="card-title"><span class="icon">🏁</span> Race 2 — Podium</div>
+          <div class="podium" id="podium-race2"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Charts row -->
+    <div class="section-gap">
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-title"><span class="icon">📊</span> Entry Distribution by Class</div>
+          <div class="chart-container">
+            <canvas id="chart-class-pie"></canvas>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title"><span class="icon">📈</span> Top 5 Session Progression</div>
+          <div class="chart-container">
+            <canvas id="chart-session-comparison"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Leaderboard + Classes -->
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-title"><span class="icon">🏅</span> Points Standings</div>
+        <div id="mini-leaderboard"></div>
+      </div>
+      <div class="card">
+        <div class="card-title"><span class="icon">🚗</span> Class Breakdown</div>
+        <div id="class-breakdown-list"></div>
+      </div>
+    </div>
+
+  </section>
+
+  <!-- ============================
+       RESULTS PANEL
+  ============================= -->
+  <section class="panel" id="panel-results">
+    <div class="section-header">
+      <h2 class="section-title">📋 Race Results</h2>
+    </div>
+
+    <!-- Filters -->
+    <div class="filter-bar">
+      <input type="text" class="filter-search" id="result-search" placeholder="🔍  Search driver, vehicle, club..." />
+      <select class="filter-select" id="result-session-select">
+        <option value="practice1">Practice 1</option>
+        <option value="practice2">Practice 2</option>
+        <option value="qualifying">Qualifying</option>
+        <option value="race1" selected>Race 1</option>
+        <option value="race2">Race 2</option>
+      </select>
+      <select class="filter-select" id="result-class-filter">
+        <option value="all">All Classes</option>
+        <option value="TA1">TA1</option>
+        <option value="TA2">TA2</option>
+        <option value="TA3">TA3</option>
+        <option value="TA4">TA4</option>
+        <option value="1S3">1S3</option>
+        <option value="2R3">2R3</option>
+        <option value="3S4">3S4</option>
+        <option value="2S4">2S4</option>
+      </select>
+    </div>
+
+    <div class="results-table-wrap">
+      <table class="results-table">
+        <thead>
+          <tr>
+            <th data-sort="pos">Pos</th>
+            <th data-sort="car">Car</th>
+            <th data-sort="driver">Driver</th>
+            <th data-sort="vehicle">Vehicle</th>
+            <th data-sort="class">Class</th>
+            <th data-sort="cap">Cap (cc)</th>
+            <th data-sort="laps">Laps</th>
+            <th data-sort="bestlap">Best Lap</th>
+            <th id="th-gap">Gap</th>
+          </tr>
+        </thead>
+        <tbody id="results-tbody">
+        </tbody>
+      </table>
+    </div>
+
+    <div style="margin-top:12px;font-size:12px;color:var(--text-muted);display:flex;gap:20px;flex-wrap:wrap">
+      <span>⚡ <span class="badge-fastest">BEST</span> = Fastest lap of session</span>
+      <span><span class="badge-lapped">+1 LAP</span> = Competitor one or more laps down</span>
+      <span>Click any row to view driver details</span>
+    </div>
+  </section>
+
+  <!-- ============================
+       LAP ANALYSIS PANEL
+  ============================= -->
+  <section class="panel" id="panel-laps">
+    <div class="section-header">
+      <h2 class="section-title">⚡ Lap Time Analysis</h2>
+    </div>
+
+    <!-- Fastest laps bar -->
+    <div class="card section-gap">
+      <div class="card-title"><span class="icon">🏎️</span> Race 1 Best Lap Comparison</div>
+      <div id="fastest-laps-bar"></div>
+    </div>
+
+    <!-- Charts -->
+    <div class="grid-2 section-gap">
+      <div class="card">
+        <div class="card-title"><span class="icon">📊</span> Lap Time Distribution — Race 1</div>
+        <div class="chart-container">
+          <canvas id="chart-lap-distribution"></canvas>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title"><span class="icon">🕸️</span> Driver Performance Radar — Top 5</div>
+        <div class="chart-container">
+          <canvas id="chart-radar"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Session best comparison bar chart -->
+    <div class="card">
+      <div class="card-title"><span class="icon">📈</span> Best Lap Per Session — Top 6 Drivers</div>
+      <div class="chart-container-tall">
+        <canvas id="chart-session-best"></canvas>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================
+       CLASS ANALYSIS PANEL
+  ============================= -->
+  <section class="panel" id="panel-classes">
+    <div class="section-header">
+      <h2 class="section-title">🚗 Analysis by Class</h2>
+    </div>
+
+    <!-- Class winners table -->
+    <div class="card section-gap">
+      <div class="card-title"><span class="icon">🏆</span> Class Winners — Race 1</div>
+      <div class="results-table-wrap">
+        <table class="results-table">
+          <thead>
+            <tr>
+              <th>Pos</th>
+              <th>Class</th>
+              <th>Driver</th>
+              <th>Car</th>
+              <th>Vehicle</th>
+              <th>Best Lap</th>
+            </tr>
+          </thead>
+          <tbody id="class-winners-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-title"><span class="icon">⏱️</span> Fastest Lap by Class — Race 1</div>
+        <div class="chart-container-tall">
+          <canvas id="chart-class-laps"></canvas>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title"><span class="icon">🔬</span> Engine Capacity vs Best Lap</div>
+        <div class="chart-container-tall">
+          <canvas id="chart-capacity-vs-lap"></canvas>
+        </div>
+        <div style="margin-top:10px" class="legend" id="cap-legend"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================
+       DRIVER COMPARISON PANEL
+  ============================= -->
+  <section class="panel" id="panel-compare">
+    <div class="section-header">
+      <h2 class="section-title">⚔️ Driver Comparison</h2>
+    </div>
+
+    <div class="compare-header">
+      <div class="compare-select-wrap">
+        <label>Driver A</label>
+        <select class="filter-select" id="compare-driver-a" style="width:100%"></select>
+      </div>
+      <div style="display:flex;align-items:flex-end;padding-bottom:2px;color:var(--text-muted);font-size:20px;font-weight:700">VS</div>
+      <div class="compare-select-wrap">
+        <label>Driver B</label>
+        <select class="filter-select" id="compare-driver-b" style="width:100%"></select>
+      </div>
+    </div>
+
+    <div class="grid-2 section-gap">
+      <div id="compare-header-a"></div>
+      <div id="compare-header-b"></div>
+    </div>
+
+    <div class="card section-gap">
+      <div class="card-title"><span class="icon">📊</span> Head-to-Head Stats</div>
+      <div id="compare-stats"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title"><span class="icon">📈</span> Race 1 — Lap-by-Lap Comparison</div>
+      <div class="chart-container-tall">
+        <canvas id="chart-compare-laps"></canvas>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================
+       GAP ANALYSIS PANEL
+  ============================= -->
+  <section class="panel" id="panel-gaps">
+    <div class="section-header">
+      <h2 class="section-title">📏 Gap Analysis</h2>
+    </div>
+
+    <div class="grid-2 section-gap">
+      <div class="card">
+        <div class="card-title"><span class="icon">🏁</span> Race 1 — Final Gaps</div>
+        <div class="gap-bar-container" id="gap-bars-race1"></div>
+      </div>
+      <div class="card">
+        <div class="card-title"><span class="icon">🏁</span> Race 2 — Final Gaps</div>
+        <div class="gap-bar-container" id="gap-bars-race2">
+          <div style="color:var(--text-muted);font-size:13px;padding:16px">Gap data for Race 2 follows similar pattern to Race 1.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title"><span class="icon">📈</span> Race 1 — Gap Evolution (Top 4 Drivers)</div>
+      <div class="chart-container-full">
+        <canvas id="chart-gap-evolution"></canvas>
+      </div>
+      <div style="margin-top:12px;font-size:12px;color:var(--text-muted)">
+        Shows cumulative time gap to race leader after each lap. A rising line = falling further behind; flat = maintaining gap.
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================
+       DRIVERS PANEL
+  ============================= -->
+  <section class="panel" id="panel-drivers">
+    <div class="section-header">
+      <h2 class="section-title">👤 Driver Profiles</h2>
+      <div style="font-size:13px;color:var(--text-muted)">Click any card for full lap detail</div>
+    </div>
+    <div class="grid-auto" id="driver-profiles-grid"></div>
+  </section>
+
+</main>
+
+<!-- ===== Driver Detail Modal ===== -->
+<div class="modal-overlay" id="driver-modal-overlay">
+  <div class="modal" id="driver-modal">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title" id="modal-driver-name"></div>
+        <div style="color:var(--text-secondary);font-size:13px;margin-top:2px" id="modal-driver-sub"></div>
+      </div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <!-- Summary stats -->
+      <div id="modal-summary"></div>
+
+      <!-- Lap time chart -->
+      <div class="card" style="margin-bottom:20px">
+        <div class="card-title"><span class="icon">📈</span> Race Lap Times</div>
+        <div style="position:relative;height:220px">
+          <canvas id="modal-lap-chart"></canvas>
+        </div>
+      </div>
+
+      <!-- Lap table -->
+      <div class="card">
+        <div class="card-title"><span class="icon">⏱️</span> All Lap Times</div>
+        <div style="max-height:320px;overflow-y:auto">
+          <table class="lap-detail-table">
+            <thead>
+              <tr>
+                <th>Session</th>
+                <th>Lap</th>
+                <th>Time</th>
+                <th>Delta</th>
+              </tr>
+            </thead>
+            <tbody id="modal-lap-table"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== Footer ===== -->
+<footer style="border-top:1px solid var(--border-color);padding:24px;text-align:center;color:var(--text-muted);font-size:12px;margin-top:48px">
+  <div style="max-width:1400px;margin:0 auto;display:flex;align-items:center;justify-content:center;gap:24px;flex-wrap:wrap">
+    <span>🏁 RaceViz — Natsoft Race Results Visualiser</span>
+    <span>Data source: <a href="https://racing.natsoft.com.au/results/#2" target="_blank" rel="noopener" style="color:var(--accent-primary);text-decoration:none">racing.natsoft.com.au/results/#2</a></span>
+    <span>NSW Supersprint Championship Round 2 · 2025</span>
+  </div>
+</footer>
+
+<!-- Scripts -->
+<script src="data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
