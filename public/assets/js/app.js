@@ -79,6 +79,33 @@
     return laps.filter((t) => t <= cutoff);
   }
 
+  function parseGapSeconds(gapText) {
+    if (!gapText || gapText === "---" || gapText === "-") return null;
+    const cleaned = String(gapText).trim().replace("+", "");
+    if (cleaned.startsWith("-")) return null;
+    const secs = parseTime(cleaned);
+    if (!Number.isFinite(secs) || secs < 0) return null;
+    return secs;
+  }
+
+  function calcStdDev(values) {
+    if (!values || values.length < 2) return null;
+    const mean = values.reduce((a, b) => a + b, 0) / values.length;
+    const variance = values.reduce((acc, v) => acc + Math.pow(v - mean, 2), 0) / values.length;
+    return Math.sqrt(variance);
+  }
+
+  function bestRollingAverage(values, windowSize) {
+    if (!values || values.length < windowSize) return null;
+    let best = Number.POSITIVE_INFINITY;
+    for (let i = 0; i <= values.length - windowSize; i++) {
+      const slice = values.slice(i, i + windowSize);
+      const avg = slice.reduce((a, b) => a + b, 0) / windowSize;
+      if (avg < best) best = avg;
+    }
+    return Number.isFinite(best) ? best : null;
+  }
+
   // ─── Init ──────────────────────────────────
   function init() {
     buildRoundSelector();
@@ -222,6 +249,7 @@
     renderImprovementPodium(sessionKey, "podium-race2");
     renderMiniLeaderboard();
     renderRecordCards();
+    renderDriverPriorityCards(sessionKey);
     renderOverviewCharts();
     renderClassBreakdown();
   }
@@ -325,6 +353,7 @@
 
   function renderRecordCards() {
     const r = RACE_DATA.records;
+    const sessionLabel = getSessionLabel(getPrimarySessionKey());
     const setRecord = (id, icon, color, value, label, driver) => {
       const el = document.getElementById(id);
       if (!el) return;
@@ -339,13 +368,88 @@
         </div>
       `;
     };
-    setRecord("record-fastest-lap", "⚡", "#a855f7", r.fastestLap.time, "Fastest Overall Lap", `#${RACE_DATA.drivers.find(d=>d.car===r.fastestLap.car)?.car} ${r.fastestLap.driver} (${r.fastestLap.session})`);
-    setRecord("record-fastest-race", "🏁", "#e8b84b", r.fastestRaceLap.time, "Fastest Race Lap", `#${r.fastestRaceLap.car} ${r.fastestRaceLap.driver} (${r.fastestRaceLap.session})`);
+    setRecord("record-fastest-lap", "⚡", "#a855f7", r.fastestLap.time, "Fastest Overall Lap", `#${RACE_DATA.drivers.find(d=>d.car===r.fastestLap.car)?.car} ${r.fastestLap.driver} (${sessionLabel})`);
+    setRecord("record-fastest-race", "🏁", "#e8b84b", r.fastestRaceLap.time, "Fastest Race Lap", `#${r.fastestRaceLap.car} ${r.fastestRaceLap.driver} (${sessionLabel})`);
     const p2Gap = (RACE_DATA.race1Gaps || [])[1];
     const gapText = p2Gap?.gap && p2Gap.gap !== "---" ? p2Gap.gap : "-";
     const gapLabel = p2Gap ? `${p2Gap.name} to leader` : "No gap data";
     setRecord("record-most-laps", "⏱", "#4facfe", gapText, "Gap P1 to P2", gapLabel);
     setRecord("record-entries", "👥", "#26de81", RACE_DATA.drivers.length + " Cars", "Total Entries", `Across ${Object.keys(RACE_DATA.classes).length} Classes`);
+  }
+
+  function renderDriverPriorityCards(sessionKey) {
+    const el = document.getElementById("driver-priority-cards");
+    if (!el) return;
+
+    const withLaps = RACE_DATA.drivers
+      .map((d) => ({ d, laps: getLapTimesSeconds(d, sessionKey) }))
+      .filter((row) => row.laps.length >= 2);
+
+    const improvement = withLaps
+      .map((row) => ({
+        d: row.d,
+        gain: row.laps[0] - Math.min(...row.laps)
+      }))
+      .filter((row) => row.gain > 0)
+      .sort((a, b) => b.gain - a.gain)[0];
+
+    const consistent = withLaps
+      .map((row) => ({ d: row.d, stdev: calcStdDev(row.laps) }))
+      .filter((row) => row.stdev != null)
+      .sort((a, b) => a.stdev - b.stdev)[0];
+
+    const best3 = withLaps
+      .map((row) => ({ d: row.d, avg3: bestRollingAverage(row.laps, 3) }))
+      .filter((row) => row.avg3 != null)
+      .sort((a, b) => a.avg3 - b.avg3)[0];
+
+    const closestBattle = (RACE_DATA.race1Gaps || [])
+      .slice(1)
+      .map((g) => ({ ...g, intervalSecs: parseGapSeconds(g.interval) }))
+      .filter((g) => g.intervalSecs != null)
+      .sort((a, b) => a.intervalSecs - b.intervalSecs)[0];
+
+    const cards = [
+      {
+        icon: "🔁",
+        title: "Biggest Improvement",
+        value: improvement ? `-${improvement.gain.toFixed(3)}s` : "-",
+        detail: improvement ? `#${improvement.d.car} ${improvement.d.name}` : "No valid lap progression",
+        color: "#45aaf2"
+      },
+      {
+        icon: "📏",
+        title: "Most Consistent",
+        value: consistent ? `${consistent.stdev.toFixed(3)}s` : "-",
+        detail: consistent ? `#${consistent.d.car} ${consistent.d.name} (std dev)` : "Not enough clean laps",
+        color: "#26de81"
+      },
+      {
+        icon: "🧪",
+        title: "Best 3-Lap Average",
+        value: best3 ? formatTime(best3.avg3) : "-",
+        detail: best3 ? `#${best3.d.car} ${best3.d.name}` : "Need 3 clean laps",
+        color: "#e8b84b"
+      },
+      {
+        icon: "🤏",
+        title: "Closest Battle",
+        value: closestBattle ? closestBattle.interval : "-",
+        detail: closestBattle ? `${closestBattle.name} to car ahead` : "No interval data",
+        color: "#ff6b35"
+      }
+    ];
+
+    el.innerHTML = cards.map((card) => `
+      <div class="record-card">
+        <div class="record-icon" style="background:${card.color}20;color:${card.color}">${card.icon}</div>
+        <div>
+          <div class="record-value" style="color:${card.color}">${card.value}</div>
+          <div class="record-label">${card.title}</div>
+          <div class="record-driver">${card.detail}</div>
+        </div>
+      </div>
+    `).join("");
   }
 
   function renderOverviewCharts() {
