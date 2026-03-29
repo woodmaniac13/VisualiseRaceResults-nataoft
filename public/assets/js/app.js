@@ -1567,21 +1567,39 @@
     let lastLeader = null;
     let largestLeadA = 0;
     let largestLeadB = 0;
+    let longestStintA = 0;
+    let longestStintB = 0;
+    let stintA = 0;
+    let stintB = 0;
+    const leadChangePoints = labels.map(() => null);
+    const leaderByLap = labels.map(() => "Level");
 
-    advantageA.forEach((v) => {
+    advantageA.forEach((v, i) => {
       let leader = "tie";
       if (v > epsilon) {
         leader = "A";
         lapsLedA++;
         if (v > largestLeadA) largestLeadA = v;
+        stintA += 1;
+        stintB = 0;
+        if (stintA > longestStintA) longestStintA = stintA;
       } else if (v < -epsilon) {
         leader = "B";
         lapsLedB++;
         if (Math.abs(v) > largestLeadB) largestLeadB = Math.abs(v);
+        stintB += 1;
+        stintA = 0;
+        if (stintB > longestStintB) longestStintB = stintB;
+      } else {
+        stintA = 0;
+        stintB = 0;
       }
+
+      leaderByLap[i] = leader === "A" ? dA.name.split(" ")[0] : leader === "B" ? dB.name.split(" ")[0] : "Level";
 
       if ((leader === "A" || leader === "B") && lastLeader && leader !== lastLeader) {
         leadChanges++;
+        leadChangePoints[i] = advantageA[i];
       }
       if (leader === "A" || leader === "B") lastLeader = leader;
     });
@@ -1596,7 +1614,9 @@
         { label: `${dB.name.split(" ")[0]} Laps Ahead`, value: String(lapsLedB) },
         { label: "Lead Changes", value: String(leadChanges) },
         { label: `${dA.name.split(" ")[0]} Max Lead`, value: formatTime(largestLeadA) },
-        { label: `${dB.name.split(" ")[0]} Max Lead`, value: formatTime(largestLeadB) }
+        { label: `${dB.name.split(" ")[0]} Max Lead`, value: formatTime(largestLeadB) },
+        { label: `${dA.name.split(" ")[0]} Longest Stint`, value: `${longestStintA} laps` },
+        { label: `${dB.name.split(" ")[0]} Longest Stint`, value: `${longestStintB} laps` }
       ].map((chip) => `
         <div class="compare-progress-chip">
           <div class="compare-progress-chip-value">${chip.value}</div>
@@ -1663,6 +1683,18 @@
             pointHoverRadius: 4
           },
           {
+            label: "Lead Change",
+            data: leadChangePoints,
+            yAxisID: "yAdv",
+            showLine: false,
+            pointStyle: "rectRot",
+            pointRadius: 6,
+            pointHoverRadius: 7,
+            pointBackgroundColor: "#ffffff",
+            pointBorderColor: "#101722",
+            pointBorderWidth: 2
+          },
+          {
             label: "Level",
             data: zeroLine,
             yAxisID: "yAdv",
@@ -1711,6 +1743,12 @@
               label: (ctx) => {
                 if (ctx.dataset.yAxisID === "yCum") {
                   return ` ${ctx.dataset.label}: ${formatTime(ctx.parsed.y)}`;
+                }
+                if (ctx.dataset.label === "Lead Change") {
+                  const lapNo = ctx.dataIndex + 1;
+                  const adv = advantageA[ctx.dataIndex] || 0;
+                  const ahead = leaderByLap[ctx.dataIndex] || "Level";
+                  return ` Lead changed on Lap ${lapNo}: ${ahead} ahead by ${formatTime(Math.abs(adv))}`;
                 }
                 if (ctx.dataset.label === "Level") return null;
                 const adv = ctx.parsed.y;
