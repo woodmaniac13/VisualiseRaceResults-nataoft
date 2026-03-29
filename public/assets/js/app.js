@@ -14,6 +14,7 @@
   let filterSearch = "";
   let compareDriverA = 0;
   let compareDriverB = 1;
+  let forcedSessionKey = null;
   let selectedDriverId = null;
   let charts = {};
 
@@ -44,8 +45,122 @@
 
   function getPrimarySessionKey() {
     const available = getAvailableSessionKeys();
+    if (forcedSessionKey && available.includes(forcedSessionKey)) return forcedSessionKey;
     const preferred = ["race1", "race2", "qualifying", "practice2", "practice1"];
     return preferred.find((k) => available.includes(k)) || available[0] || "race1";
+  }
+
+  function normalizeToken(value) {
+    return String(value || "").trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+  }
+
+  function resolveSessionKey(token) {
+    if (!token) return null;
+    const normToken = normalizeToken(token);
+    const available = getAvailableSessionKeys();
+    return available.find((key) => {
+      const normKey = normalizeToken(key);
+      const normLabel = normalizeToken(getSessionLabel(key));
+      return normKey === normToken || normLabel === normToken;
+    }) || null;
+  }
+
+  function parseLinkState() {
+    const params = new URLSearchParams(window.location.search);
+    const panel = params.get("panel") || params.get("view");
+    const roundRaw = (params.get("round") || params.get("r") || "").trim();
+    const sessionRaw = params.get("session") || params.get("s");
+
+    let roundIndex = 0;
+    if (roundRaw) {
+      const numeric = Number(roundRaw);
+      if (Number.isFinite(numeric)) {
+        if (numeric >= 1 && numeric <= ALL_ROUNDS.length) roundIndex = numeric - 1;
+        else if (numeric >= 0 && numeric < ALL_ROUNDS.length) roundIndex = numeric;
+      } else {
+        const target = roundRaw.toLowerCase();
+        const byId = ALL_ROUNDS.findIndex((r) => String(r.id || "").toLowerCase() === target);
+        const byPhase = ALL_ROUNDS.findIndex((r) => String(r.event?.phaseLabel || "").toLowerCase() === target);
+        if (byId >= 0) roundIndex = byId;
+        else if (byPhase >= 0) roundIndex = byPhase;
+      }
+    }
+
+    return {
+      panel: panel ? String(panel).toLowerCase() : null,
+      roundIndex,
+      sessionToken: sessionRaw,
+      driverAToken: params.get("driverA") || params.get("a"),
+      driverBToken: params.get("driverB") || params.get("b")
+    };
+  }
+
+  function resolveDriverToken(token) {
+    if (!token) return null;
+    const raw = String(token).trim();
+    const numeric = Number(raw.replace(/^#/, ""));
+    if (Number.isFinite(numeric)) {
+      return RACE_DATA.drivers.find((d) => d.id === numeric)
+        || RACE_DATA.drivers.find((d) => d.car === numeric)
+        || null;
+    }
+
+    const norm = normalizeToken(raw);
+    return RACE_DATA.drivers.find((d) => normalizeToken(d.name) === norm)
+      || RACE_DATA.drivers.find((d) => normalizeToken(d.name).includes(norm))
+      || null;
+  }
+
+  function syncShareUrl(replace = true) {
+    if (!window.history || !window.location) return;
+    const params = new URLSearchParams();
+
+    const roundSelector = document.getElementById("round-selector");
+    let roundIndex = roundSelector ? parseInt(roundSelector.value, 10) : ALL_ROUNDS.findIndex((r) => r === RACE_DATA);
+    if (!Number.isFinite(roundIndex) || roundIndex < 0) roundIndex = 0;
+
+    params.set("panel", currentPanel || "overview");
+    params.set("round", String(roundIndex + 1));
+    params.set("session", getPrimarySessionKey());
+
+    const dA = RACE_DATA.drivers.find((d) => d.id === compareDriverA);
+    const dB = RACE_DATA.drivers.find((d) => d.id === compareDriverB);
+    if (dA) params.set("driverA", String(dA.car));
+    if (dB) params.set("driverB", String(dB.car));
+
+    const newUrl = `${window.location.pathname}?${params.toString()}${window.location.hash || ""}`;
+    if (replace) window.history.replaceState({}, "", newUrl);
+    else window.history.pushState({}, "", newUrl);
+  }
+
+  function applyLinkState(state) {
+    if (!state) return;
+
+    const resolvedSession = resolveSessionKey(state.sessionToken);
+    if (resolvedSession) forcedSessionKey = resolvedSession;
+
+    const wantsCompare = state.panel === "compare" || state.driverAToken || state.driverBToken;
+    if (wantsCompare) {
+      const selA = document.getElementById("compare-driver-a");
+      const selB = document.getElementById("compare-driver-b");
+      const driverA = resolveDriverToken(state.driverAToken) || RACE_DATA.drivers[0];
+      const fallbackB = RACE_DATA.drivers.find((d) => d.id !== driverA?.id) || RACE_DATA.drivers[1] || driverA;
+      const driverB = resolveDriverToken(state.driverBToken) || fallbackB;
+
+      if (driverA) compareDriverA = driverA.id;
+      if (driverB) compareDriverB = driverB.id;
+
+      if (selA && compareDriverA) selA.value = String(compareDriverA);
+      if (selB && compareDriverB) selB.value = String(compareDriverB);
+      refreshComparison();
+      activatePanel("compare");
+      return;
+    }
+
+    const allowedPanels = new Set(["overview", "results", "laps", "classes", "compare", "gaps", "drivers"]);
+    if (state.panel && allowedPanels.has(state.panel)) {
+      activatePanel(state.panel);
+    }
   }
 
   function getSessionLabel(sessionKey) {
@@ -134,7 +249,8 @@
 
   // ─── Init ──────────────────────────────────
   function init() {
-    buildRoundSelector();
+    const linkState = parseLinkState();
+    buildRoundSelector(linkState.roundIndex);
     buildResultClassFilterOptions();
     attachResultsEvents();
     attachNavEvents();
@@ -143,13 +259,15 @@
     // Keep navigation usable even if one panel renderer fails.
     try {
       renderAll();
+      applyLinkState(linkState);
+      syncShareUrl(true);
     } catch (err) {
       console.error("Render error:", err);
     }
   }
 
   // Build the round selector dropdown from ALL_ROUNDS
-  function buildRoundSelector() {
+  function buildRoundSelector(initialRoundIndex = 0) {
     const sel = document.getElementById("round-selector");
     if (!sel) return;
     sel.innerHTML = ALL_ROUNDS.map((r, i) => {
@@ -158,7 +276,9 @@
       const label = `${testName} (${d.toLocaleDateString("en-AU", { day: "numeric", month: "short" })})`;
       return `<option value="${i}">${label}</option>`;
     }).join("");
-    sel.value = "0";
+    const safeIndex = Math.min(Math.max(initialRoundIndex, 0), Math.max(ALL_ROUNDS.length - 1, 0));
+    sel.value = String(safeIndex);
+    if (ALL_ROUNDS[safeIndex]) RACE_DATA = ALL_ROUNDS[safeIndex];
     sel.addEventListener("change", (e) => {
       RACE_DATA = ALL_ROUNDS[parseInt(e.target.value)];
       selectedSession = "race1";
@@ -183,6 +303,7 @@
     const searchInput = document.getElementById("result-search");
     if (searchInput) searchInput.value = "";
     activatePanel(currentPanel);
+    syncShareUrl(true);
   }
 
   function buildResultClassFilterOptions() {
@@ -224,6 +345,8 @@
     setTimeout(() => {
       Object.values(charts).forEach((c) => c && c.resize && c.resize());
     }, 50);
+
+    syncShareUrl(true);
   }
 
   function attachNavEvents() {
@@ -1211,11 +1334,13 @@
       compareDriverA = parseInt(selA.value);
       compareDriverB = parseInt(selB.value);
       refreshComparison();
+      syncShareUrl(true);
     };
     selB.onchange = () => {
       compareDriverA = parseInt(selA.value);
       compareDriverB = parseInt(selB.value);
       refreshComparison();
+      syncShareUrl(true);
     };
     refreshComparison();
   }
@@ -1228,6 +1353,7 @@
     renderCompareHeaders(dA, dB, colorA, colorB);
     renderCompareStats(dA, dB, colorA, colorB);
     renderCompareLapChart(dA, dB, colorA, colorB);
+    renderCompareProgressChart(dA, dB, colorA, colorB);
   }
 
   function getCompareDriverColors(dA, dB) {
@@ -1393,6 +1519,118 @@
         scales: {
           x: { grid: { color: "#252d3d" }, ticks: { color: "#8892a4" } },
           y: { grid: { color: "#252d3d" }, ticks: { color: "#8892a4", callback: (v) => formatTime(v) } }
+        }
+      }
+    });
+  }
+
+  function renderCompareProgressChart(dA, dB, colorA, colorB) {
+    const ctx = document.getElementById("chart-compare-progress");
+    if (!ctx) return;
+    if (charts["compare-progress"]) charts["compare-progress"].destroy();
+
+    const sessionKey = getPrimarySessionKey();
+    const lapTimesA = (dA.sessions[sessionKey]?.lapTimes || []).slice(1).map(parseTime).filter(Boolean);
+    const lapTimesB = (dB.sessions[sessionKey]?.lapTimes || []).slice(1).map(parseTime).filter(Boolean);
+    const maxLen = Math.max(lapTimesA.length, lapTimesB.length);
+    const labels = Array.from({ length: maxLen }, (_, i) => `Lap ${i + 1}`);
+
+    const cumulative = (laps) => {
+      let total = 0;
+      return laps.map((t) => {
+        total += t;
+        return total;
+      });
+    };
+
+    const cumA = cumulative(lapTimesA);
+    const cumB = cumulative(lapTimesB);
+    const gapAB = labels.map((_, i) => {
+      if (i >= cumA.length || i >= cumB.length) return null;
+      return cumA[i] - cumB[i];
+    });
+
+    charts["compare-progress"] = new Chart(ctx, {
+      type: "line",
+      data: {
+        labels,
+        datasets: [
+          {
+            label: `${dA.name.split(" ")[0]} cumulative`,
+            data: labels.map((_, i) => (i < cumA.length ? cumA[i] : null)),
+            yAxisID: "y",
+            borderColor: colorA,
+            backgroundColor: colorA + "1f",
+            tension: 0.28,
+            borderWidth: 2.5,
+            pointRadius: 2,
+            pointHoverRadius: 5
+          },
+          {
+            label: `${dB.name.split(" ")[0]} cumulative`,
+            data: labels.map((_, i) => (i < cumB.length ? cumB[i] : null)),
+            yAxisID: "y",
+            borderColor: colorB,
+            backgroundColor: colorB + "1f",
+            tension: 0.28,
+            borderWidth: 2.5,
+            pointRadius: 2,
+            pointHoverRadius: 5
+          },
+          {
+            label: "Gap (A-B)",
+            data: gapAB,
+            yAxisID: "yGap",
+            borderColor: "#9fb0c8",
+            backgroundColor: "#9fb0c81a",
+            borderDash: [6, 4],
+            tension: 0.2,
+            borderWidth: 2,
+            pointRadius: 0,
+            pointHoverRadius: 4
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        interaction: { mode: "index", intersect: false },
+        plugins: {
+          legend: { labels: { color: "#8892a4", padding: 12, font: { size: 12 } } },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => {
+                if (ctx.dataset.yAxisID === "y") {
+                  return ` ${ctx.dataset.label}: ${formatTime(ctx.parsed.y)}`;
+                }
+                const gap = ctx.parsed.y;
+                if (!Number.isFinite(gap)) return " Gap: -";
+                const leader = gap < 0 ? dA.name.split(" ")[0] : gap > 0 ? dB.name.split(" ")[0] : "Level";
+                return ` Gap: ${gap < 0 ? "-" : "+"}${formatTime(Math.abs(gap))} (${leader} ahead)`;
+              }
+            }
+          }
+        },
+        scales: {
+          x: { grid: { color: "#252d3d" }, ticks: { color: "#8892a4" } },
+          y: {
+            position: "left",
+            grid: { color: "#252d3d" },
+            ticks: { color: "#8892a4", callback: (v) => formatTime(v) },
+            title: { display: true, text: "Cumulative Time", color: "#8892a4" }
+          },
+          yGap: {
+            position: "right",
+            grid: { drawOnChartArea: false },
+            ticks: {
+              color: "#8892a4",
+              callback: (v) => {
+                const abs = Math.abs(v);
+                return `${v < 0 ? "-" : "+"}${formatTime(abs)}`;
+              }
+            },
+            title: { display: true, text: "Gap (A-B)", color: "#8892a4" }
+          }
         }
       }
     });
