@@ -682,6 +682,15 @@
     if (!ctx) return;
     if (charts["session-comparison"]) charts["session-comparison"].destroy();
 
+    const isCompact = window.matchMedia("(max-width: 680px)").matches;
+    const formatLapAxisTick = (seconds) => {
+      if (!Number.isFinite(seconds)) return "";
+      const rounded = Math.max(0, Math.round(seconds));
+      const mins = Math.floor(rounded / 60);
+      const secs = rounded % 60;
+      return `${mins}:${String(secs).padStart(2, "0")}`;
+    };
+
     const sessionKey = getPrimarySessionKey();
     const top5 = getTopDriversBySession(5, sessionKey);
     const maxLaps = Math.max(...top5.map((d) => getLapTimesSeconds(d, sessionKey).length), 0);
@@ -767,7 +776,11 @@
           x: { grid: { color: "#252d3d" }, ticks: { color: "#8892a4" } },
           y: {
             grid: { color: "#252d3d" },
-            ticks: { color: "#8892a4", callback: (v) => formatTime(v) },
+            ticks: {
+              color: "#8892a4",
+              font: { size: isCompact ? 9 : 10 },
+              callback: (v) => formatLapAxisTick(v)
+            },
             reverse: false,
             min: chartMinTime()
           }
@@ -1470,6 +1483,15 @@
     if (!ctx) return;
     if (charts["compare-laps"]) charts["compare-laps"].destroy();
 
+    const isCompact = window.matchMedia("(max-width: 680px)").matches;
+    const formatLapAxisTick = (seconds) => {
+      if (!Number.isFinite(seconds)) return "";
+      const rounded = Math.max(0, Math.round(seconds));
+      const mins = Math.floor(rounded / 60);
+      const secs = rounded % 60;
+      return `${mins}:${String(secs).padStart(2, "0")}`;
+    };
+
     const lapTimesA = (dA.sessions.race1?.lapTimes || []).slice(1).map(parseTime).filter(Boolean);
     const lapTimesB = (dB.sessions.race1?.lapTimes || []).slice(1).map(parseTime).filter(Boolean);
     const maxLen = Math.max(lapTimesA.length, lapTimesB.length);
@@ -1518,7 +1540,14 @@
         },
         scales: {
           x: { grid: { color: "#252d3d" }, ticks: { color: "#8892a4" } },
-          y: { grid: { color: "#252d3d" }, ticks: { color: "#8892a4", callback: (v) => formatTime(v) } }
+          y: {
+            grid: { color: "#252d3d" },
+            ticks: {
+              color: "#8892a4",
+              font: { size: isCompact ? 9 : 10 },
+              callback: (v) => formatLapAxisTick(v)
+            }
+          }
         }
       }
     });
@@ -1539,12 +1568,13 @@
       if (!Number.isFinite(seconds)) return "";
       const sign = seconds < 0 ? "-" : includeSign ? "+" : "";
       const abs = Math.abs(seconds);
-      if (abs >= 60) {
-        const minutes = Math.floor(abs / 60);
-        const secs = abs - (minutes * 60);
-        return `${sign}${minutes}:${secs.toFixed(1).padStart(4, "0")}`;
+      const rounded = Math.round(abs);
+      if (rounded >= 60) {
+        const minutes = Math.floor(rounded / 60);
+        const secs = rounded % 60;
+        return `${sign}${minutes}:${String(secs).padStart(2, "0")}`;
       }
-      return `${sign}${abs.toFixed(1)}s`;
+      return `${sign}${rounded}s`;
     };
     const lapTimesA = (dA.sessions[sessionKey]?.lapTimes || []).slice(1).map(parseTime).filter(Boolean);
     const lapTimesB = (dB.sessions[sessionKey]?.lapTimes || []).slice(1).map(parseTime).filter(Boolean);
