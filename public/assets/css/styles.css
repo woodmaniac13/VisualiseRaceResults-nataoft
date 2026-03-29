@@ -956,6 +956,14 @@ body::before {
   border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
+.chart-container-compare-progress {
+  height: 340px;
+}
+
+.chart-container-compare-progress canvas {
+  max-height: none;
+}
+
 /* ===== Lap time chart area ===== */
 .lap-timeline {
   margin-top: 8px;
@@ -1308,6 +1316,11 @@ body::before {
   .event-title { font-size: 20px; }
   .podium-block { width: 70px; }
   .compare-stat-label { width: 80px; }
+  .compare-progress-summary { grid-template-columns: 1fr 1fr; }
+  .compare-progress-chip { padding: 8px 10px; }
+  .compare-progress-chip-value { font-size: 14px; }
+  .compare-progress-chip-label { font-size: 10px; }
+  .chart-container-compare-progress { height: 280px; }
   .gap-bar-name { width: 90px; }
   .lap-bar-label { width: 60px; }
   .site-header { padding: 0 16px; }

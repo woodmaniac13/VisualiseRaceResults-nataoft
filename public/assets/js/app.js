@@ -1532,6 +1532,7 @@
     if (charts["compare-progress"]) charts["compare-progress"].destroy();
 
     const sessionKey = getPrimarySessionKey();
+    const isCompact = window.matchMedia("(max-width: 680px)").matches;
     const lapTimesA = (dA.sessions[sessionKey]?.lapTimes || []).slice(1).map(parseTime).filter(Boolean);
     const lapTimesB = (dB.sessions[sessionKey]?.lapTimes || []).slice(1).map(parseTime).filter(Boolean);
     const lapCount = Math.min(lapTimesA.length, lapTimesB.length);
@@ -1608,7 +1609,7 @@
     const finalLeader = finalAdv > epsilon ? dA.name.split(" ")[0] : finalAdv < -epsilon ? dB.name.split(" ")[0] : "Tie";
 
     if (summaryEl) {
-      summaryEl.innerHTML = [
+      const chips = [
         { label: "Final Margin", value: `${finalLeader} ${finalLeader === "Tie" ? "" : `by ${formatTime(Math.abs(finalAdv))}`}`.trim() },
         { label: `${dA.name.split(" ")[0]} Laps Ahead`, value: String(lapsLedA) },
         { label: `${dB.name.split(" ")[0]} Laps Ahead`, value: String(lapsLedB) },
@@ -1617,7 +1618,13 @@
         { label: `${dB.name.split(" ")[0]} Max Lead`, value: formatTime(largestLeadB) },
         { label: `${dA.name.split(" ")[0]} Longest Stint`, value: `${longestStintA} laps` },
         { label: `${dB.name.split(" ")[0]} Longest Stint`, value: `${longestStintB} laps` }
-      ].map((chip) => `
+      ];
+
+      const chipsToRender = isCompact
+        ? chips.filter((c) => ["Final Margin", `${dA.name.split(" ")[0]} Laps Ahead`, `${dB.name.split(" ")[0]} Laps Ahead`, "Lead Changes"].includes(c.label))
+        : chips;
+
+      summaryEl.innerHTML = chipsToRender.map((chip) => `
         <div class="compare-progress-chip">
           <div class="compare-progress-chip-value">${chip.value}</div>
           <div class="compare-progress-chip-label">${chip.label}</div>
@@ -1639,98 +1646,138 @@
       }).join("");
     }
 
+    const datasets = [
+      {
+        label: `${dA.name.split(" ")[0]} advantage`,
+        data: positiveAdv,
+        yAxisID: "yAdv",
+        borderColor: colorA,
+        backgroundColor: colorA + "2a",
+        tension: 0.2,
+        fill: "origin",
+        borderWidth: 2.5,
+        pointRadius: 0,
+        pointHoverRadius: 4,
+        spanGaps: true
+      },
+      {
+        label: `${dB.name.split(" ")[0]} advantage`,
+        data: negativeAdv,
+        yAxisID: "yAdv",
+        borderColor: colorB,
+        backgroundColor: colorB + "2a",
+        tension: 0.2,
+        fill: "origin",
+        borderWidth: 2.5,
+        pointRadius: 0,
+        pointHoverRadius: 4,
+        spanGaps: true
+      },
+      {
+        label: "Driver A Advantage",
+        data: advantageA,
+        yAxisID: "yAdv",
+        borderColor: "#c2cfdf",
+        backgroundColor: "transparent",
+        borderDash: [5, 4],
+        tension: 0.2,
+        borderWidth: 2,
+        pointRadius: 1.5,
+        pointHoverRadius: 4
+      },
+      {
+        label: "Lead Change",
+        data: leadChangePoints,
+        yAxisID: "yAdv",
+        showLine: false,
+        pointStyle: "rectRot",
+        pointRadius: 6,
+        pointHoverRadius: 7,
+        pointBackgroundColor: "#ffffff",
+        pointBorderColor: "#101722",
+        pointBorderWidth: 2
+      },
+      {
+        label: "Level",
+        data: zeroLine,
+        yAxisID: "yAdv",
+        borderColor: "#7f8ca5",
+        borderWidth: 2,
+        pointRadius: 0,
+        borderDash: [2, 2]
+      }
+    ];
+
+    if (!isCompact) {
+      datasets.push(
+        {
+          label: `${dA.name.split(" ")[0]} cumulative`,
+          data: cumA,
+          yAxisID: "yCum",
+          borderColor: colorA + "66",
+          backgroundColor: "transparent",
+          tension: 0.2,
+          borderWidth: 1.5,
+          pointRadius: 0
+        },
+        {
+          label: `${dB.name.split(" ")[0]} cumulative`,
+          data: cumB,
+          yAxisID: "yCum",
+          borderColor: colorB + "66",
+          backgroundColor: "transparent",
+          tension: 0.2,
+          borderWidth: 1.5,
+          pointRadius: 0
+        }
+      );
+    }
+
+    const scales = {
+      x: {
+        grid: { color: "#252d3d" },
+        ticks: {
+          color: "#8892a4",
+          autoSkip: true,
+          maxTicksLimit: isCompact ? 8 : 15
+        }
+      },
+      yAdv: {
+        position: "left",
+        grid: { color: "#252d3d" },
+        ticks: {
+          color: "#8892a4",
+          callback: (v) => `${v >= 0 ? "+" : "-"}${formatTime(Math.abs(v))}`
+        },
+        title: { display: true, text: "Driver A Advantage", color: "#8892a4" }
+      }
+    };
+
+    if (!isCompact) {
+      scales.yCum = {
+        position: "right",
+        grid: { drawOnChartArea: false },
+        ticks: {
+          color: "#8892a4",
+          callback: (v) => formatTime(v)
+        },
+        title: { display: true, text: "Cumulative Time", color: "#8892a4" }
+      };
+    }
+
     charts["compare-progress"] = new Chart(ctx, {
       type: "line",
       data: {
         labels,
-        datasets: [
-          {
-            label: `${dA.name.split(" ")[0]} advantage`,
-            data: positiveAdv,
-            yAxisID: "yAdv",
-            borderColor: colorA,
-            backgroundColor: colorA + "2a",
-            tension: 0.2,
-            fill: "origin",
-            borderWidth: 2.5,
-            pointRadius: 0,
-            pointHoverRadius: 4,
-            spanGaps: true
-          },
-          {
-            label: `${dB.name.split(" ")[0]} advantage`,
-            data: negativeAdv,
-            yAxisID: "yAdv",
-            borderColor: colorB,
-            backgroundColor: colorB + "2a",
-            tension: 0.2,
-            fill: "origin",
-            borderWidth: 2.5,
-            pointRadius: 0,
-            pointHoverRadius: 4,
-            spanGaps: true
-          },
-          {
-            label: "Driver A Advantage",
-            data: advantageA,
-            yAxisID: "yAdv",
-            borderColor: "#c2cfdf",
-            backgroundColor: "transparent",
-            borderDash: [5, 4],
-            tension: 0.2,
-            borderWidth: 2,
-            pointRadius: 1.5,
-            pointHoverRadius: 4
-          },
-          {
-            label: "Lead Change",
-            data: leadChangePoints,
-            yAxisID: "yAdv",
-            showLine: false,
-            pointStyle: "rectRot",
-            pointRadius: 6,
-            pointHoverRadius: 7,
-            pointBackgroundColor: "#ffffff",
-            pointBorderColor: "#101722",
-            pointBorderWidth: 2
-          },
-          {
-            label: "Level",
-            data: zeroLine,
-            yAxisID: "yAdv",
-            borderColor: "#7f8ca5",
-            borderWidth: 2,
-            pointRadius: 0,
-            borderDash: [2, 2]
-          },
-          {
-            label: `${dA.name.split(" ")[0]} cumulative`,
-            data: cumA,
-            yAxisID: "yCum",
-            borderColor: colorA + "66",
-            backgroundColor: "transparent",
-            tension: 0.2,
-            borderWidth: 1.5,
-            pointRadius: 0
-          },
-          {
-            label: `${dB.name.split(" ")[0]} cumulative`,
-            data: cumB,
-            yAxisID: "yCum",
-            borderColor: colorB + "66",
-            backgroundColor: "transparent",
-            tension: 0.2,
-            borderWidth: 1.5,
-            pointRadius: 0
-          }
-        ]
+        datasets
       },
       options: {
         responsive: true,
-        maintainAspectRatio: true,
+        maintainAspectRatio: !isCompact,
         interaction: { mode: "index", intersect: false },
         plugins: {
           legend: {
+            display: !isCompact,
             labels: {
               color: "#8892a4",
               padding: 12,
@@ -1759,27 +1806,7 @@
             }
           }
         },
-        scales: {
-          x: { grid: { color: "#252d3d" }, ticks: { color: "#8892a4" } },
-          yAdv: {
-            position: "left",
-            grid: { color: "#252d3d" },
-            ticks: {
-              color: "#8892a4",
-              callback: (v) => `${v >= 0 ? "+" : "-"}${formatTime(Math.abs(v))}`
-            },
-            title: { display: true, text: "Driver A Advantage", color: "#8892a4" }
-          },
-          yCum: {
-            position: "right",
-            grid: { drawOnChartArea: false },
-            ticks: {
-              color: "#8892a4",
-              callback: (v) => formatTime(v)
-            },
-            title: { display: true, text: "Cumulative Time", color: "#8892a4" }
-          }
-        }
+        scales
       }
     });
   }
