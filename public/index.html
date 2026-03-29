@@ -32,11 +32,21 @@
       <button class="nav-tab" data-panel="drivers">Drivers</button>
     </nav>
 
-    <button class="mobile-menu-btn" id="mobile-menu-btn" aria-label="Open menu"></button>
+    <button
+      class="mobile-menu-btn"
+      id="mobile-menu-btn"
+      aria-label="Open menu"
+      aria-expanded="false"
+      aria-controls="mobile-menu"
+      type="button"
+    >
+      <span class="mobile-menu-icon" aria-hidden="true"></span>
+      <span class="mobile-menu-label">Menu</span>
+    </button>
   </div>
 
   <!-- Mobile menu -->
-  <div id="mobile-menu" style="display:none;flex-direction:column;padding:8px 16px 16px;gap:4px;border-top:1px solid var(--border-color)">
+  <div id="mobile-menu" class="mobile-menu" style="display:none;flex-direction:column;padding:8px 16px 16px;gap:4px;border-top:1px solid var(--border-color)">
     <button class="nav-tab" data-panel="overview">Overview</button>
     <button class="nav-tab" data-panel="results">Results</button>
     <button class="nav-tab" data-panel="laps">Lap Analysis</button>
